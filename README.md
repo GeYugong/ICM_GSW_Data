@@ -11,6 +11,7 @@ ICM_GSW_Data/
 │   ├── gsw_draft_history.csv     # 历史选秀记录 (Source: B-Ref)
 │   ├── gsw_financing_5years.csv  # 融资结构与估值 (Source: Forbes)
 │   ├── gsw_player_value.csv      # 球员高阶身价 PER/WS (Source: B-Ref)
+│   ├── gsw_future_assets.csv     # 未来选秀权资产 (Source: RealGM)
 │   ├── gsw_salaries_5years.csv   # 薪资支出 Cap Hit (Source: Spotrac)
 │   ├── gsw_schedule_5years.csv   # 每日赛程与胜率 (Source: B-Ref)
 │
