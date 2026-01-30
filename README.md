@@ -9,20 +9,16 @@
 ICM_GSW_Data/
 ├── data/                         # [核心产出] 清洗后的 CSV 数据集
 │   ├── gsw_draft_history.csv     # 历史选秀记录 (Source: B-Ref)
-│   ├── gsw_future_assets.csv     # 未来选秀权资产 (Source: RealGM)
 │   ├── gsw_financing_5years.csv  # 融资结构与估值 (Source: Forbes)
 │   ├── gsw_player_value.csv      # 球员高阶身价 PER/WS (Source: B-Ref)
 │   ├── gsw_salaries_5years.csv   # 薪资支出 Cap Hit (Source: Spotrac)
 │   ├── gsw_schedule_5years.csv   # 每日赛程与胜率 (Source: B-Ref)
-│   ├── gsw_ticket_revenue.csv    # 门票收入与上座率 (Source: ESPN/Forbes)
-│   └── gsw_transaction_counts.csv# 交易与签约活跃度 (Source: B-Ref)
 │
 ├── scripts/                      # [工程源码] 数据爬虫与清洗脚本
 │   ├── get_finance_structure.py  # 生成债权/股权融资数据
 │   ├── get_player_value.py       # 爬取球员效率值 (破解 HTML 注释)
 │   ├── get_salaries.py           # 爬取薪资数据 (含死磕模式 + 自动重试)
 │   ├── get_schedule.py           # 爬取赛程并计算 Rolling Win Rate
-│   ├── get_ticket_revenue.py     # 爬取上座率并计算隐含票价
 │   └── get_transactions_and_draft.py # 爬取选秀与交易记录
 │
 ├── requirements.txt              # Python 依赖库

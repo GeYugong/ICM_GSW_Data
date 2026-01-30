@@ -4,144 +4,137 @@ import os
 import time
 import random
 import urllib3
+import re
 
 # --- 配置 ---
-SEASONS = list(range(2021, 2026)) 
+SEASONS = list(range(2021, 2026))
+OUTPUT_FILE = "data/gsw_ticket_revenue.csv"
 TEAM_CODE = "GSW"
-OUTPUT_FILE = "data/gsw_player_value.csv"
 
 # --- 代理设置 (端口 7897) ---
 PROXIES = {
     "http": "http://127.0.0.1:7897",
     "https": "http://127.0.0.1:7897",
 }
-# 清除环境变量
 os.environ.pop("http_proxy", None)
 os.environ.pop("https_proxy", None)
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# --- ⭐ 保底数据 (Fail-safe Data) ---
-# 来源: Basketball-Reference 历史归档
-# 如果爬取失败，直接使用这些真实数据
-BACKUP_DATA = {
-    2021: {"Season": 2021, "Avg_PER": 13.5, "Avg_WS": 2.8, "Top_Player_PER": 26.3, "Player_Count": 14}, # Curry MVP级表现
-    2022: {"Season": 2022, "Avg_PER": 14.8, "Avg_WS": 3.9, "Top_Player_PER": 21.4, "Player_Count": 15}, # 夺冠赛季，全员高效
-    2023: {"Season": 2023, "Avg_PER": 14.1, "Avg_WS": 3.2, "Top_Player_PER": 24.1, "Player_Count": 13},
-    2024: {"Season": 2024, "Avg_PER": 13.8, "Avg_WS": 2.9, "Top_Player_PER": 22.3, "Player_Count": 14},
-    2025: {"Season": 2025, "Avg_PER": 15.2, "Avg_WS": 3.5, "Top_Player_PER": 23.5, "Player_Count": 12}, # 假设/当前赛季
-}
+# --- 票价估算模型 (Ticket Price Estimator) ---
+# 由于没有网站公开每日门票收入，我们建立一个简单的估算模型
+# 基础票价(Base) * (1 + 通胀率) * 球队表现系数
+BASE_TICKET_PRICE = 280  # 勇士队平均票价极高 (美元)
 
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-]
-
-def get_player_value_v3():
+def get_ticket_data_bref():
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
-    all_years_data = []
+    all_data = []
 
-    print(f"💎 开始抓取球员身价数据 (V3: 破解注释隐藏 + 自动保底)...")
+    print(f"🎫 启动 B-Ref 门票数据爬虫 (纯净模式: 无保底数据)...")
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
 
     for season in SEASONS:
+        # Basketball-Reference 赛季主页
         url = f"https://www.basketball-reference.com/teams/{TEAM_CODE}/{season}.html"
-        print(f"\n   ⏳ [目标] {season} 赛季: {url}")
-
-        success = False
-        attempt = 0
-        max_retries = 3 
-
-        while not success and attempt < max_retries:
-            attempt += 1
-            headers = {"User-Agent": random.choice(USER_AGENTS)}
-
-            try:
-                # 请求网页
-                response = requests.get(url, headers=headers, proxies=PROXIES, timeout=15, verify=False)
+        print(f"\n   ⏳ [正在抓取] {season} 赛季: {url}")
+        
+        try:
+            # 发送请求 (死磕模式: 必须成功，否则该年为空)
+            response = requests.get(url, headers=headers, proxies=PROXIES, timeout=20, verify=False)
+            
+            if response.status_code == 200:
+                # B-Ref 的 Misc 表格通常包含上座率
+                # 我们寻找 id="team_misc" 的表格
                 
-                if response.status_code == 200:
-                    # --- 关键破解步骤 ---
-                    # Basketball-Reference 把表格藏在 HTML 注释里了
-                    # 需要移除 <!-- 和 --> 让表格"显形"
-                    html_content = response.text
-                    html_content = html_content.replace('<!--', '')
-                    html_content = html_content.replace('-->', '')
+                # 技巧: 有些表格被注释隐藏了，先清洗
+                html = response.text.replace('', '')
+                
+                # 读取所有表格
+                dfs = pd.read_html(html)
+                
+                found_data = False
+                
+                for df in dfs:
+                    # 将列名转为字符串处理
+                    df.columns = [str(c) for c in df.columns]
                     
-                    # 解析处理后的 HTML
-                    dfs = pd.read_html(html_content)
-                    
-                    target_df = None
-                    # 寻找 Advanced 表格 (通常 id="advanced")
-                    # 或者寻找包含 'PER' 和 'WS' 的表
-                    for df in dfs:
-                        cols_str = [str(c) for c in df.columns]
-                        if any('PER' in c for c in cols_str) and any('WS' in c for c in cols_str):
-                            target_df = df
-                            break
-                    
-                    if target_df is not None:
-                        # --- 数据清洗 ---
-                        # 过滤表头
-                        if 'Rk' in target_df.columns:
-                            target_df = target_df[target_df['Rk'] != 'Rk']
+                    # 寻找包含 'Attendance' 的表格
+                    if 'Attendance' in df.columns:
+                        # 通常这个表只有两行 (Team, League Avg) 或一行
+                        # 我们取第一行 (Team)
                         
-                        # 转换数值
-                        cols_to_numeric = ['G', 'MP', 'PER', 'WS']
-                        for col in cols_to_numeric:
-                            matches = [c for c in target_df.columns if str(col) in str(c)]
-                            if matches:
-                                target_df[matches[0]] = pd.to_numeric(target_df[matches[0]], errors='coerce')
-
-                        # 筛选核心球员 (G > 10, MP > 100)
-                        # 模糊匹配列名
-                        g_col = next((c for c in target_df.columns if 'G' == str(c) or 'G' in str(c)), None)
-                        mp_col = next((c for c in target_df.columns if 'MP' == str(c) or 'MP' in str(c)), None)
-                        per_col = next((c for c in target_df.columns if 'PER' in str(c)), None)
-                        ws_col = next((c for c in target_df.columns if 'WS' in str(c)), None)
-
-                        if g_col and mp_col:
-                            core_players = target_df[ (target_df[g_col] > 10) & (target_df[mp_col] > 100) ].copy()
+                        # 提取总上座人数
+                        att_val = df.iloc[0]['Attendance']
+                        
+                        # 处理数据清洗 (有些年份可能是 NaN, 如2021)
+                        if pd.isna(att_val):
+                            home_total = 0
                         else:
-                            core_players = target_df.head(15)
-
-                        if len(core_players) < 1: core_players = target_df.head(15)
-
-                        if per_col and ws_col:
-                            row_data = {
-                                "Season": season,
-                                "Avg_PER": round(core_players[per_col].mean(), 2),
-                                "Avg_WS": round(core_players[ws_col].mean(), 2),
-                                "Top_Player_PER": round(core_players[per_col].max(), 2),
-                                "Player_Count": len(core_players)
-                            }
-                            all_years_data.append(row_data)
-                            print(f"      ✅ [第{attempt}次] 爬取成功: PER={row_data['Avg_PER']}")
-                            success = True
+                            home_total = int(att_val)
+                            
+                        # 场均上座 (Attendance/G)
+                        if 'Attend./G' in df.columns:
+                            avg_val = df.iloc[0]['Attend./G']
+                            home_avg = int(avg_val) if not pd.isna(avg_val) else 0
                         else:
-                            raise ValueError("Column Not Found")
-                    else:
-                        raise ValueError("Table Not Found")
+                            # 如果没有场均列，手动计算 (假设41场主场)
+                            home_avg = int(home_total / 41) if home_total > 0 else 0
+                        
+                        # --- 收入模型计算 ---
+                        # 2021年特殊处理 (疫情空场)
+                        if season == 2021:
+                            est_price = 0
+                        else:
+                            # 票价每年涨 5% (通胀)
+                            inflation_factor = 1.05 ** (season - 2022)
+                            # 表现系数: 夺冠年(2022) 票价更贵
+                            perf_factor = 1.2 if season == 2022 else 1.0
+                            
+                            est_price = BASE_TICKET_PRICE * inflation_factor * perf_factor
+                        
+                        # 计算总收入 (百万美元)
+                        # Revenue = (Total_Attendance * Price) / 1,000,000
+                        revenue_m = (home_total * est_price) / 1_000_000
+                        
+                        # 记录数据
+                        row = {
+                            "Season": season,
+                            "Home_Total_Attendance": home_total,
+                            "Home_Avg_Attendance": home_avg,
+                            "Est_Avg_Ticket_Price": round(est_price, 2),
+                            "Gate_Revenue_M": round(revenue_m, 2),
+                            "Source": "Basketball-Reference Scraped"
+                        }
+                        all_data.append(row)
+                        print(f"      ✅ 抓取成功: 总人数 {home_total:,} | 估算收入 ${revenue_m:.1f}M")
+                        found_data = True
+                        break # 找到就跳出表格循环
+                
+                if not found_data:
+                    print(f"      ⚠️ 页面下载成功，但未找到 'Attendance' 列。")
+                    # 这里不再使用保底数据，直接跳过
+            
+            else:
+                print(f"      ❌ HTTP {response.status_code} - 抓取失败")
 
-                else:
-                    print(f"      ❌ HTTP {response.status_code}")
+        except Exception as e:
+            print(f"      ❌ 严重错误: {e}")
+        
+        # 礼貌性延迟，防止 B-Ref 封 IP
+        time.sleep(random.uniform(3, 5))
 
-            except Exception as e:
-                print(f"      ❌ [第{attempt}次] 失败: {str(e)[:50]}")
-                time.sleep(random.uniform(1, 3))
-
-        # --- 失败启用保底 ---
-        if not success:
-            backup = BACKUP_DATA.get(season)
-            all_years_data.append(backup)
-            print(f"      🔄 已启用保底数据: PER={backup['Avg_PER']} (真实历史数据)")
-
-    # --- 保存 ---
-    if all_years_data:
-        final_df = pd.DataFrame(all_years_data)
-        final_df.to_csv(OUTPUT_FILE, index=False)
-        print(f"\n💾 球员身价数据已保存至: {OUTPUT_FILE}")
-        print(final_df)
+    # --- 保存结果 ---
+    if all_data:
+        df_result = pd.DataFrame(all_data)
+        df_result.to_csv(OUTPUT_FILE, index=False)
+        print(f"\n💾 数据已保存至: {OUTPUT_FILE}")
+        print(df_result)
+    else:
+        print("\n⚠️ 警告: 未获取到任何数据 (由于禁用了保底数据，请检查网络连接)")
 
 if __name__ == "__main__":
-    get_player_value_v3()
+    get_ticket_data_bref()
