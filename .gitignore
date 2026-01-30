@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# 项目特定配置
+*.pyc
+.DS_Store
+.vscode/
+# 注意：我们故意不忽略 data/*.csv，因为你要通过 GitHub 把数据传给队友
