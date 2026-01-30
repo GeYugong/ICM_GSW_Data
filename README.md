@@ -82,7 +82,6 @@ ICM_GSW_Data/
 | **gsw_schedule_5years.csv** | `Win_Flag`, `Recent_Win_Rate_10` | ** (竞技状态)**: 衡量球队即时战绩 |
 | **gsw_player_value.csv** | `Avg_PER` (平均能力), `Top_Player_PER` (球星成色) | ** & **: 竞技基础与球星号召力 |
 | **gsw_salaries_5years.csv** | `Total_Salary_Expense` | ** (薪资管理)**: 球队最大的运营成本 |
-| **gsw_ticket_revenue.csv** | `Implied_Avg_Ticket_Price`, `Gate_Revenue_M` | ** (营收管理)**: 门票定价策略与收入 |
 | **gsw_financing_5years.csv** | `Debt_Amount_M`, `Equity_Value_M`, `Leverage` | ** (资本结构)**: 债权/股权融资与杠杆率 |
 | **gsw_future_assets.csv** | `First_Round_Pick` (0/1) | ** (资产储备)**: 用于交易或未来的潜在价值 |
 
